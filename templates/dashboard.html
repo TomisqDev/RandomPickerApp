@@ -1,0 +1,25 @@
+<div class="card">
+    <h3>Create New Wheel</h3>
+    <form action="/add_wheel" method="post">
+        <input type="text" name="title" placeholder="Wheel Title" required>
+        <button type="submit">Create Wheel</button>
+    </form>
+</div>
+
+<a href="/logout">Log out</a>
+
+<div class="card">
+    <h2>Your Lucky Wheels</h2>
+    {% if wheels %}
+        <ul>
+        {% for wheel in wheels %}
+            <li>
+                <strong>{{ wheel.title }}</strong> 
+                <a href="/wheel/{{ wheel.id }}">Open</a>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Nothing here yet. Create your first wheel above!</p>
+    {% endif %}
+</div>

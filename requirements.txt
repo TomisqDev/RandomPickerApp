@@ -1,2 +1,5 @@
 mysql-connector-python
 python-dotenv
+bcrypt
+flask
+logic

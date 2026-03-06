@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ wheel.title }} - Detail</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; background-color: #f8f9fa; }
+        .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .item-list { list-style: none; padding: 0; }
+        .item-list li { background: #eee; margin: 5px 0; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; color: white; text-decoration: none; display: inline-block; }
+        .btn-add { background: #28a745; }
+        .btn-roll { background: #007bff; font-size: 1.2rem; width: 100%; margin-top: 10px; }
+        input[type="text"] { padding: 10px; width: 70%; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <a href="/dashboard">← Back to the Dashboard</a>
+    
+    <div class="card">
+        <h1>{{ wheel.title }}</h1>
+        <form action="/add_item/{{ wheel.id }}" method="post">
+            <input type="text" name="label" placeholder="Add Item (e.g., Pizza)" required>
+            <button type="submit" class="btn btn-add">Add Item</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Items in the Wheel:</h3>
+        <ul class="item-list">
+            {% for item in items %}
+                <li>{{ item.label }}</li>
+            {% else %}
+                <li>No items yet. Add the first one!</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    {% if items|length > 1 %}
+    <div class="card" style="text-align: center;">
+        <button class="btn btn-roll" onclick="startRolling()">ROLL!</button>
+        <h2 id="winner-display" style="color: #d9534f; min-height: 1.5em;"></h2>
+    </div>
+    {% endif %}
+
+<script>
+    function startRolling() {
+        const display = document.getElementById('winner-display');
+        
+        const wheelItems = {{ items | map(attribute='label') | list | tojson | safe }};
+        
+        if (wheelItems.length < 2) {
+            display.innerText = "Add at least 2 items!";
+            return;
+        }
+
+        let counter = 0;
+        let speed = 50;
+        
+        const interval = setInterval(() => {
+            const randomTemp = wheelItems[Math.floor(Math.random() * wheelItems.length)];
+            display.innerText = randomTemp;
+            display.style.opacity = "0.5";
+            counter++;
+
+            if (counter > 20) {
+                clearInterval(interval);
+                finalizeWinner(wheelItems, display);
+            }
+        }, speed);
+    }
+
+    function finalizeWinner(wheelItems, display) {
+        const winner = wheelItems[Math.floor(Math.random() * wheelItems.length)];
+        
+        display.style.opacity = "1";
+        display.style.fontSize = "2rem";
+        display.innerText = "✨ " + winner + " ✨";
+        
+        console.log("Winner is: " + winner);
+    }
+</script>
+</body>
+</html>
