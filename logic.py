@@ -2,6 +2,7 @@ import bcrypt
 import random
 from database import DatabaseConnector
 
+
 def fetch_from_db(query, params):
     db = DatabaseConnector()
     cursor = db.get_cursor()
