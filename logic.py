@@ -2,7 +2,6 @@ import bcrypt
 import random
 from database import DatabaseConnector
 
-# Pomocná funkce pro čtení (upraveno pro vaši třídu)
 def fetch_from_db(query, params):
     db = DatabaseConnector()
     cursor = db.get_cursor()
@@ -12,7 +11,6 @@ def fetch_from_db(query, params):
     db.close()
     return result
 
-# Pomocná funkce pro zápis (vrací lastrowid)
 def write_to_db(query, params):
     db = DatabaseConnector()
     conn = db.connect()
@@ -27,7 +25,7 @@ def write_to_db(query, params):
 def username_exists(username):
     query = "SELECT id FROM users WHERE username = %s"
     result = fetch_from_db(query, (username,))
-    return len(result) > 0  # Vrátí True, pokud uživatel existuje
+    return len(result) > 0
 
 def register_user(username, password):
     if username_exists(username):
@@ -75,3 +73,15 @@ def get_wheel_details(wheel_id):
 def get_wheel_items(wheel_id):
     query = "SELECT * FROM items WHERE wheel_id = %s"
     return fetch_from_db(query, (wheel_id,))
+
+def delete_wheel(wheel_id):
+    query_items = "DELETE FROM items WHERE wheel_id = %s"
+    write_to_db(query_items, (wheel_id,))
+    
+    query_wheel = "DELETE FROM wheels WHERE id = %s"
+    write_to_db(query_wheel, (wheel_id,))
+
+
+def delete_item(item_id):
+    query = "DELETE FROM items WHERE id = %s"
+    write_to_db(query, (item_id,))

@@ -1,102 +1,112 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-import logic
-
-
-
-
-import logic
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_wtf.csrf import CSRFProtect
+from markupsafe import escape
 import os
-print(f"DEBUG: Soubor logic.py je zde: {os.path.abspath(logic.__file__)}")
-print(f"DEBUG: Seznam funkcí: {dir(logic)}")
-
-
-
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'
+app.config['SECRET_KEY'] = 'vasi-velmi-tajne-heslo-12345' # Změňte na silný klíč
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Aktivace CSRF ochrany
+csrf = CSRFProtect(app)
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
+# --- MODELY (Předpokládaná struktura) ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+
+class Wheel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    items = db.relationship('Item', backref='wheel', cascade="all, delete-orphan", lazy=True)
+
+class Item(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(100), nullable=False)
+    wheel_id = db.Column(db.Integer, db.ForeignKey('wheel.id'), nullable=False)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# --- ROUTES ---
 
 @app.route('/')
-def index():
-    # Pokud je uživatel přihlášen, šup na dashboard
-    if 'user_id' in session:
-        return redirect(url_for('dashboard'))
-    # Pokud ne, ukážeme mu jen čistý login
-    return render_template('login.html')
-
-@app.route('/login', methods=['POST'])
-def login():
-    # Tato cesta teď slouží POUZE pro zpracování dat (POST)
-    username = request.form.get('username')
-    password = request.form.get('password')
-    
-    user_id = logic.login_user(username, password)
-    
-    if user_id:
-        session['user_id'] = user_id
-        return redirect(url_for('dashboard'))
-    else:
-        # Pokud se sekne, vrátíme ho na index s hláškou
-        return "Chybné jméno nebo heslo. <a href='/'>Zkusit znovu</a>", 401
-    
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        user_id = logic.register_user(username, password)
-        
-        if user_id:
-            return redirect(url_for('index'))
-        else:
-            return "Chyba: Uživatel již existuje.", 400
-            
-    return render_template('register.html')
-
-@app.route('/dashboard')
+@login_required
 def dashboard():
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
-    
-    wheels = logic.get_user_wheels(session['user_id'])
-    return render_template('dashboard.html', wheels=wheels)
-
-@app.route('/add_wheel', methods=['POST'])
-def add_wheel():
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
-    
-    title = request.form.get('title')
-    if title:
-        logic.add_new_wheel(session['user_id'], title)
-    
-    return redirect(url_for('dashboard'))
+    wheels = Wheel.query.filter_by(user_id=current_user.id).all()
+    return render_template('dashboard.html', wheels=wheels, active_wheel=None, items=[])
 
 @app.route('/wheel/<int:wheel_id>')
+@login_required
 def wheel_detail(wheel_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
-    
-    wheel = logic.get_wheel_details(wheel_id)
-    items = logic.get_wheel_items(wheel_id)
-    
-    return render_template('wheel.html', wheel=wheel, items=items)
+    # Ochrana: Kolo musí patřit přihlášenému uživateli
+    active_wheel = Wheel.query.filter_by(id=wheel_id, user_id=current_user.id).first_or_404()
+    wheels = Wheel.query.filter_by(user_id=current_user.id).all()
+    items = Item.query.filter_by(wheel_id=active_wheel.id).all()
+    return render_template('dashboard.html', wheels=wheels, active_wheel=active_wheel, items=items)
+
+@app.route('/add_wheel', methods=['POST'])
+@login_required
+def add_wheel():
+    # Čištění a validace vstupu
+    title = escape(request.form.get('title', '').strip())
+    if not title or len(title) > 50:
+        flash("Neplatný název kola.")
+        return redirect(url_for('dashboard'))
+
+    new_wheel = Wheel(title=title, user_id=current_user.id)
+    db.session.add(new_wheel)
+    db.session.commit()
+    return redirect(url_for('wheel_detail', wheel_id=new_wheel.id))
 
 @app.route('/add_item/<int:wheel_id>', methods=['POST'])
+@login_required
 def add_item(wheel_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
+    # Autorizace: Patří kolo mně?
+    wheel = Wheel.query.filter_by(id=wheel_id, user_id=current_user.id).first_or_404()
     
-    label = request.form.get('label')
-    if label:
-        logic.add_item_to_wheel(wheel_id, label)
-    
+    label = escape(request.form.get('label', '').strip())
+    if not label or len(label) > 100:
+        flash("Neplatná položka.")
+        return redirect(url_for('wheel_detail', wheel_id=wheel_id))
+
+    new_item = Item(label=label, wheel_id=wheel.id)
+    db.session.add(new_item)
+    db.session.commit()
     return redirect(url_for('wheel_detail', wheel_id=wheel_id))
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('index'))
+@app.route('/remove_item/<int:wheel_id>/<int:item_id>')
+@login_required
+def remove_item(wheel_id, item_id):
+    # SQL Injection ochrana: SQLAlchemy parametry
+    # IDOR ochrana: join s Wheel a kontrola user_id
+    item = Item.query.join(Wheel).filter(
+        Item.id == item_id,
+        Wheel.id == wheel_id,
+        Wheel.user_id == current_user.id
+    ).first_or_404()
+
+    db.session.delete(item)
+    db.session.commit()
+    return redirect(url_for('wheel_detail', wheel_id=wheel_id))
+
+@app.route('/remove_wheel/<int:wheel_id>')
+@login_required
+def remove_wheel(wheel_id):
+    wheel = Wheel.query.filter_by(id=wheel_id, user_id=current_user.id).first_or_404()
+    db.session.delete(wheel)
+    db.session.commit()
+    return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
