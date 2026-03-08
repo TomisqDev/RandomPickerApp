@@ -26,3 +26,7 @@ created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 wheel_id INT,
 FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
 );
+
+SELECT * FROM users;
+
+SELECT title FROM wheels;
